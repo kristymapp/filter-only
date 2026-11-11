@@ -34923,6 +34923,7 @@ var WebProsUI = (() => {
     mimeLabel: () => mimeLabel,
     navigationMenuTriggerStyle: () => navigationMenuTriggerStyle,
     parseFilterDate: () => parseFilterDate,
+    FILTER_DATE_PRESETS: () => FILTER_DATE_PRESETS,
     parseFilterNumber: () => parseFilterNumber,
     statVariants: () => statVariants,
     statusToneToBadgeVariant: () => statusToneToBadgeVariant,
@@ -109977,6 +109978,28 @@ var WebProsUI = (() => {
     "is-missing": "Is missing"
   };
   var RANGE_SEPARATOR = "..";
+  // PROTOTYPE DS CHANGE (date presets): a date filter value may be a rolling preset token, "last:<N>d",
+  // meaning from N days ago through today. It stays relative - the dates move as days pass.
+  var FILTER_DATE_PRESETS = [
+    { value: "last:7d", label: "Last 7 days" },
+    { value: "last:30d", label: "Last 30 days" },
+    { value: "last:365d", label: "Last 12 months" }
+  ];
+  var DATE_PRESET_PATTERN = /^last:(\d+)d$/;
+  function resolveDatePreset(value) {
+    const match2 = DATE_PRESET_PATTERN.exec(String(value ?? ""));
+    if (!match2) return void 0;
+    const to = new Date();
+    to.setHours(23, 59, 59, 999);
+    const from = new Date();
+    from.setHours(0, 0, 0, 0);
+    from.setDate(from.getDate() - Number(match2[1]));
+    return { from, to };
+  }
+  function datePresetsFor(attribute) {
+    if (!attribute?.presets) return [];
+    return attribute.presets === true ? FILTER_DATE_PRESETS : attribute.presets;
+  }
   var ATTRIBUTE_ICON = {
     text: Type,
     select: List,
@@ -110009,6 +110032,8 @@ var WebProsUI = (() => {
     return { from: start, to: to ? fromISODate(to) : void 0 };
   }
   function parseFilterDate(value) {
+    const preset = resolveDatePreset(value);
+    if (preset) return preset;
     const decoded = decodeDate(value);
     if (!decoded?.from) return void 0;
     const from = new Date(decoded.from);
@@ -110114,6 +110139,8 @@ var WebProsUI = (() => {
         return attribute.options.find((o4) => o4.value === raw)?.label ?? raw;
       }
       if (attribute?.type === "date") {
+        const preset = datePresetsFor(attribute).find((o4) => o4.value === raw);
+        if (preset) return preset.label;
         const decoded = decodeDate(raw);
         if (!decoded?.from) return raw;
         return decoded.to ? `${dateFormat.format(decoded.from)} - ${dateFormat.format(decoded.to)}` : dateFormat.format(decoded.from);
@@ -110636,7 +110663,51 @@ var WebProsUI = (() => {
             )
           },
           applyLabel
-        ))) : active.range ? /* @__PURE__ */ React438.createElement(
+        ))) : active.range ? /* @__PURE__ */ React438.createElement(React438.Fragment, null, datePresetsFor(active).length ? /* @__PURE__ */ React438.createElement(
+          "div",
+          {
+            role: "listbox",
+            "aria-label": `${active.label} presets`,
+            tabIndex: 0,
+            "aria-activedescendant": `${optionListboxId}-preset-${optionHighlighted}`,
+            onKeyDown: (event) => {
+              const presets = datePresetsFor(active);
+              if (event.key === "ArrowDown") {
+                event.preventDefault();
+                setOptionHighlighted((i6) => Math.min(i6 + 1, presets.length - 1));
+              } else if (event.key === "ArrowUp") {
+                event.preventDefault();
+                setOptionHighlighted((i6) => Math.max(i6 - 1, 0));
+              } else if (event.key === "Enter") {
+                event.preventDefault();
+                const preset = presets[optionHighlighted];
+                if (preset) applyFilter(active.key, preset.value);
+              }
+            },
+            className: "border-b border-border p-1 outline-none"
+          },
+          datePresetsFor(active).map((preset, index2) => {
+            const isApplied = filters.some((f3) => f3.key === active.key && f3.value === preset.value);
+            return /* @__PURE__ */ React438.createElement(
+              "div",
+              {
+                key: preset.value,
+                id: `${optionListboxId}-preset-${index2}`,
+                role: "option",
+                "aria-selected": isApplied,
+                onMouseEnter: () => setOptionHighlighted(index2),
+                onClick: () => applyFilter(active.key, preset.value),
+                className: cn(
+                  "flex cursor-default select-none items-center gap-2.5 rounded-sm px-2.5 py-2 text-sm text-foreground outline-none",
+                  "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 [&_svg]:text-muted-foreground",
+                  index2 === optionHighlighted && "bg-muted ring-1 ring-inset ring-ring/[77%] dark:ring-ring/[56%]"
+                )
+              },
+              /* @__PURE__ */ React438.createElement("span", { className: "min-w-0 flex-1 truncate" }, preset.label),
+              isApplied ? /* @__PURE__ */ React438.createElement(Check, { "aria-hidden": "true" }) : null
+            );
+          })
+        ) : null, /* @__PURE__ */ React438.createElement(
           Calendar2,
           {
             mode: "range",
@@ -110646,7 +110717,7 @@ var WebProsUI = (() => {
               if (next?.from) applyFilter(active.key, encodeDate(next), true);
             }
           }
-        ) : /* @__PURE__ */ React438.createElement(
+        )) : /* @__PURE__ */ React438.createElement(
           Calendar2,
           {
             mode: "single",
@@ -146954,8 +147025,8 @@ class Component extends DCLogic {
       all: [],
       active: [{ key: 'status', value: 'Active' }],
       terminated: [{ key: 'status', value: 'Terminated' }],
-      added: [{ key: 'activated', value: FROM30 + '..' + TODAY }],
-      expired: [{ key: 'status', value: 'Expired' }, { key: 'expires', value: FROM30 + '..' + TODAY }],
+      added: [{ key: 'activated', value: 'last:30d' }],
+      expired: [{ key: 'status', value: 'Expired' }, { key: 'expires', value: 'last:30d' }],
       cpanel: [{ key: 'product', value: 'cPanel' }],
       plesk: [{ key: 'product', value: 'Plesk' }],
     };
@@ -147396,6 +147467,14 @@ class Component extends DCLogic {
     }
     const LSK = (window.WebProsUI || {}).FILTER_FIELD_SEARCH_KEY || '__search';
     const isoOf = d => { const x = new Date(d); return isNaN(x) ? '' : x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); };
+    // a date chip's value as an [from, to] ISO pair: a picked range ("YYYY-MM-DD..YYYY-MM-DD") or a rolling preset
+    // ("last:30d"), which the design system's parseFilterDate resolves against today
+    const dateRangeOf = (v) => {
+      const P = (window.WebProsUI || {}).parseFilterDate;
+      const r = P ? P(String(v)) : null;
+      if (r) return [isoOf(r.from), isoOf(r.to)];
+      const [a, b] = String(v).split('..'); return [a, b || a];
+    };
     // what a license search looks at: its identifiers, product details, account and server
     const licHay = r => [r.id, r.status, r.product, r.plan, r.account, r.ip, r.hostname, r.distro].join(' ').toLowerCase();
     const lf = s.licFilters || [];
@@ -147403,7 +147482,7 @@ class Component extends DCLogic {
     if (licOrderActive) {
       const byKey = {}; lf.forEach(f => { (byKey[f.key] = byKey[f.key] || []).push(f.value); });
       licRows = licRows.filter(r => Object.entries(byKey).every(([k, vals]) => vals.some(v => {
-        if (k === 'activated' || k === 'expires') { const d = isoOf(r[k]); const [a, b] = String(v).split('..'); return !!d && d >= a && d <= (b || a); }
+        if (k === 'activated' || k === 'expires') { const d = isoOf(r[k]); const [a, b] = dateRangeOf(v); return !!d && d >= a && d <= b; }
         if (k === LSK) return licHay(r).includes(String(v).toLowerCase());
         return r[k] === v;
       })));
@@ -147709,7 +147788,7 @@ class Component extends DCLogic {
     if (af.length) {
       const byKey = {}; af.forEach(f => { (byKey[f.key] = byKey[f.key] || []).push(f.value); });
       acctRows = acctRows.filter(r => Object.entries(byKey).every(([k, vals]) => vals.some(v => {
-        if (k === 'created') { const d = isoAcct(r.created); const [a, b] = String(v).split('..'); return !!d && d >= a && d <= (b || a); }
+        if (k === 'created') { const d = isoAcct(r.created); const [a, b] = dateRangeOf(v); return !!d && d >= a && d <= b; }
         if (k === 'type') return !!(r.flags && r.flags[v]);
         if (k === LSK) return [r.id, r.name, r.status].join(' ').toLowerCase().includes(String(v).toLowerCase());
         return r[k] === v;
@@ -148468,7 +148547,7 @@ class Component extends DCLogic {
       setAcctQuery: (q) => this.setState({ acctFilter: q || '' }),
       acctFilters: af, setAcctFilters: (v) => this.setState({ acctFilters: v || [] }),
       acctFilterAttrs: [
-        { key: 'created', label: 'Created', type: 'date', range: true },
+        { key: 'created', label: 'Created', type: 'date', range: true, presets: true },
         { key: 'status', label: 'Status', type: 'select', multiple: true, searchable: false, options: [{ value: 'Active', label: 'Active', tone: 'success' }, { value: 'Terminated', label: 'Terminated', tone: 'neutral' }] },
         { key: 'type', label: 'Account type', type: 'select', multiple: true, searchable: false, options: [
           { value: 'resaleCertificateOnFile', label: 'Can sell' }, { value: 'keyAccount', label: 'Key account' }, { value: 'retailStorePurchase', label: 'Store purchaser' },
@@ -148543,8 +148622,8 @@ class Component extends DCLogic {
       closeAgreement: () => this.setState({ agreement: null }),
       licTitle,
       licFilterAttrs: [
-        { key: 'activated', label: 'Created', type: 'date', range: true },
-        { key: 'expires', label: 'Expires', type: 'date', range: true },
+        { key: 'activated', label: 'Created', type: 'date', range: true, presets: true },
+        { key: 'expires', label: 'Expires', type: 'date', range: true, presets: true },
         { key: 'status', label: 'Status', type: 'select', multiple: true, searchable: false, options: [{ value: 'Active', label: 'Active', tone: 'success' }, { value: 'Suspended', label: 'Suspended', tone: 'destructive' }, { value: 'Locked', label: 'Locked', tone: 'warning' }, { value: 'Expired', label: 'Expired', tone: 'neutral' }, { value: 'Terminated', label: 'Terminated', tone: 'neutral' }] },
         { key: 'product', label: 'Product', type: 'select', multiple: true, options: [...new Set((role === 'admin' && s.navMode === 'licenses' ? LD.rows : allLicenses).map(r => r.product))].sort().map(p => ({ value: p, label: p })) },
         { key: 'account', label: 'Account', type: 'select', multiple: true, options: [...new Set((role === 'admin' && s.navMode === 'licenses' ? LD.rows : allLicenses).map(r => r.account))].sort().map(p => ({ value: p, label: p })) },
